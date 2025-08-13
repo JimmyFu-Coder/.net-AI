@@ -1,0 +1,35 @@
+# ---------- build stage ----------
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+WORKDIR /src
+
+# 可选：通过参数指定项目路径/配置
+ARG PROJECT=Api/Api.csproj
+ARG BUILD_CONFIGURATION=Debug
+
+# 1) 先只拷贝 csproj 做缓存，加快后续构建
+COPY Api/Api.csproj Api/
+RUN dotnet restore $PROJECT
+
+# 2) 再拷贝剩余源码
+COPY Api/ Api/
+
+# 3) 发布（可切 Release：--build-arg BUILD_CONFIGURATION=Release）
+RUN dotnet publish $PROJECT -c $BUILD_CONFIGURATION -o /app -f net9.0
+
+# ---------- runtime stage ----------
+FROM mcr.microsoft.com/dotnet/aspnet:9.0
+WORKDIR /app
+
+# 拷贝发布产物
+COPY --from=build /app .
+
+# 暴露端口 & 监听所有地址
+ENV ASPNETCORE_URLS=http://+:8080
+ENV ASPNETCORE_ENVIRONMENT=Development
+EXPOSE 8080
+
+# （可选）更安全的非 root 运行
+# RUN useradd -u 64198 -m appuser && chown -R 64198:64198 /app
+# USER 64198
+
+ENTRYPOINT ["dotnet", "Api.dll"]
